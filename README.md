@@ -1,6 +1,8 @@
 # Stop Playing Factorio Bot
 
-A stupid bot to tell people to stop playing Factorio.
+A silly bot to tell people to stop playing Factorio.
+
+![No more Factorio](./icon.png)
 
 ## Installation instructions
 
