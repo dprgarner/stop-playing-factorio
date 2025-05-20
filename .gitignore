@@ -1,0 +1,12 @@
+.DS_Store
+.mypy_cache
+.pytest_cache
+.vscode
+.python-version
+__pycache__
+build
+dist
+output
+*.egg-info
+.env
+*.log

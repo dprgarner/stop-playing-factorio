@@ -1,0 +1,17 @@
+[project]
+name = "stop-playing-factorio"
+version = "0.0.1"
+description = "A novelty Discord bot. Practicing my Python again."
+dependencies = [
+  "discord.py",
+  "python-dotenv"
+]
+
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+
+[project.scripts]
+spfactorio = "stop_playing_factorio.version:version"
