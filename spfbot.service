@@ -1,0 +1,14 @@
+[Unit]
+Description=Stop Playing Factorio bot
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=10
+User=pi
+ExecStart=/home/pi/stop-playing-factorio/run.sh
+
+[Install]
+WantedBy=multi-user.target

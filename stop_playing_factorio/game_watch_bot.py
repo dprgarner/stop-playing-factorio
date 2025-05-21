@@ -24,6 +24,7 @@ class GameWatchBot(commands.Bot):
         intents.presences = True
 
         super().__init__(*args, **kwargs, command_prefix="$", intents=intents)
+
         self.game = game
         self.relative_notifications = relative_notifications
         self.queued_notifications = {}
@@ -73,7 +74,7 @@ class GameWatchBot(commands.Bot):
             self.set_notifications(member.name, playing_since)
         self.check_watched_games.start()
 
-    async def on_presence_update(self, before: discord.Member, after: discord.Member):
+    async def on_presence_update(self, _before: discord.Member, after: discord.Member):
         playing_since = self.is_playing_since(after)
         if not playing_since and after.name in self.queued_notifications:
             logger.info(

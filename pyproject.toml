@@ -1,7 +1,7 @@
 [project]
 name = "stop-playing-factorio"
 version = "0.0.1"
-description = "A novelty Discord bot to tell people to stop playing Factorio."
+description = "A silly Discord bot to tell people to stop playing Factorio."
 dependencies = [
   "discord.py",
   "python-dotenv"
@@ -11,4 +11,3 @@ dependencies = [
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
-

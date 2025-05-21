@@ -13,7 +13,7 @@ def main() -> None:
     bot = GameWatchBot(
         game="Factorio", relative_notifications=FACTORIO_RELATIVE_NOTIFICATIONS
     )
-    handler = logging.FileHandler(filename="discord.log", encoding="utf-8", mode="w")
+    handler = logging.FileHandler(filename="spfbot.log", encoding="utf-8", mode="a")
     discord.utils.setup_logging(level=logging.INFO, handler=handler)
     bot.run(os.getenv("TOKEN"))
 

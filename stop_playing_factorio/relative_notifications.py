@@ -8,23 +8,23 @@ RelativeNotification = namedtuple("RelativeNotification", "minutes message")
 FACTORIO_RELATIVE_NOTIFICATIONS = [
     RelativeNotification(
         60,
-        "You've been playing Factorio for over an hour. Perhaps stretch your legs and grab a cup of tea?",
+        "You've been playing Factorio for an hour. Perhaps stretch your legs and grab a cup of tea?",
     ),
     RelativeNotification(
         120,
-        "You've been playing Factorio for over two hours. It might be time for a break?",
+        "You've now been playing Factorio for over two hours. It might be time for a break?",
     ),
     RelativeNotification(
         150,
-        "I'd strongly recommend stepping away from squishing biters for a bit.",
+        "I recommend stepping away from squishing biters for a bit.",
     ),
     RelativeNotification(
         180,
-        "You've now been playing Factorio for over three hours. I'd strongly suggest untangling those spaghetti conveyor belts another time.",
+        "You've been playing Factorio for over three hours. I'd strongly suggest untangling those spaghetti conveyor belts another time.",
     ),
     RelativeNotification(
         210,
-        "Reminder: You're a human, not a construction robot. Stand up, breathe, recalibrate.",
+        "Reminder: You're a human, not a construction robot. Stand up, move around, recalibrate.",
     ),
     RelativeNotification(
         240,

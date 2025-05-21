@@ -13,17 +13,17 @@ A silly bot to tell people to stop playing Factorio.
 1. `python -m stop_playing_factorio`
 1. Enjoy being sassed by a bot ⚙️❌
 
-## Stuff
+## Notes
+
+This is currently running on the Raspberry Pi.
+
+There's a systemctl file at `/etc/systemd/system/spfbot.service`, and it's enabled on start-up.
+
+Pex didn't work because aiohttp needs some ARM-built stuff, so I copied the repo across and installed it with a new venv.
+
+The aiohttp wheel takes a while to build on the pi, and also needed `apt-get install python3-dev` for the compilation.
 
 ```bash
-$ pex "." --console-script spfactorio  --output-file app.pex
+$ systemctl status spfbot
+$ tail -f /home/pi/stop-playing-factorio/spfbot.log
 ```
-
-## Links
-
-- https://discordpy.readthedocs.io/en/latest/faq.html
-- https://discord.com/developers/docs/quick-start/overview-of-apps
-- https://medium.com/@benmorel/creating-a-linux-service-with-systemd-611b5c8b91d6
-- https://pex.readthedocs.io/en/v2.1.163/recipes.html
-- https://builtin.com/software-engineering-perspectives/discord-bot-python
-- https://serverfault.com/questions/413397/how-to-set-environment-variable-in-systemd-service
