@@ -13,17 +13,17 @@ A silly bot to tell people to stop playing Factorio.
 1. `python -m stop_playing_factorio`
 1. Enjoy being sassed by a bot ⚙️❌
 
-## Notes
+## "Deployment" Notes
 
-This is currently running on the Raspberry Pi.
+This is currently running on a Raspberry Pi.
 
-There's a systemctl file at `/etc/systemd/system/spfbot.service`, and it's enabled on start-up.
+There's a systemctl file at `/etc/systemd/system/spfbot.service` (symlinked to the source-controlled one), and it's enabled to run on start-up.
 
-Pex didn't work because aiohttp needs some ARM-built stuff, so I copied the repo across and installed it with a new venv.
+The repo is checked out with a virtual env at `./venv`, and there's a simple `./run.sh` script to activate the env and run the bot module.
 
-The aiohttp wheel takes a while to build on the pi, and also needed `apt-get install python3-dev` for the compilation.
+The aiohttp wheel takes a while to build on the pi, and needs `apt-get install python3-dev` for the compilation.
 
 ```bash
-$ systemctl status spfbot
+$ sudo systemctl status spfbot
 $ tail -f /home/pi/stop-playing-factorio/spfbot.log
 ```
