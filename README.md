@@ -4,10 +4,16 @@ A silly bot to tell people to stop playing Factorio.
 
 ![No more Factorio](./icon.png)
 
-## Installation instructions
+## Installing the bot on your server
+
+https://discord.com/oauth2/authorize?client_id=1374351019819012168
+
+## Development
+
+The bot runs in Python using [discord.py](https://discordpy.readthedocs.io/en/latest/intro.html#installing), which uses the [Gateway API](https://discord.com/developers/docs/events/gateway) (i.e. communicates with Discord via a persistent Websocket connection). To run the bot locally:
 
 1. Set up and activate a Python 3.8+ virtual environment.
-1. Install the dependencies in an editable environment with `pip install -e .`. (See [Discord docs](https://discordpy.readthedocs.io/en/latest/intro.html#installing) if this doesn't work).
+1. Install the dependencies in an editable environment with `pip install -e .`.
 1. Create a Discord bot with the Presences, Server Members, and Message Content permissions.
 1. Add the bot token to a `.env` file as the env variable `TOKEN`.
 1. `python -m stop_playing_factorio`
@@ -15,7 +21,7 @@ A silly bot to tell people to stop playing Factorio.
 
 ## "Deployment" Notes
 
-This is currently running on a Raspberry Pi.
+The bot is currently running on a Raspberry Pi.
 
 There's a systemctl file at `/etc/systemd/system/spfbot.service` (symlinked to the source-controlled one), and it's enabled to run on start-up.
 
