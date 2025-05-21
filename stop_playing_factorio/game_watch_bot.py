@@ -19,10 +19,8 @@ class GameWatchBot(commands.Bot):
         **kwargs,
     ):
         intents = discord.Intents.default()
-        intents.message_content = True
         intents.members = True
         intents.presences = True
-
         super().__init__(*args, **kwargs, command_prefix="$", intents=intents)
 
         self.game = game
@@ -61,7 +59,7 @@ class GameWatchBot(commands.Bot):
         logger.info(f"Attempting to message {member.name}")
         channel = member.dm_channel or await member.create_dm()
         await channel.send(message)
-        logger.info("Message sent to {member.name}: {message}")
+        logger.info(f"Message sent to {member.name}: {message}")
 
     async def on_ready(self):
         logger.info(
