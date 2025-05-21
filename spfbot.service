@@ -1,6 +1,6 @@
 [Unit]
 Description=Stop Playing Factorio bot
-After=network.target
+After=network.target systemd-time-wait-sync.service
 StartLimitIntervalSec=0
 
 [Service]
