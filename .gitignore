@@ -9,4 +9,5 @@ dist
 output
 *.egg-info
 .env
-*.log
+logs/spfbot*
+spfbot.db

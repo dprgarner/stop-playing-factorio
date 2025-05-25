@@ -15,7 +15,7 @@ The bot runs in Python using [discord.py](https://discordpy.readthedocs.io/en/la
 1. Set up and activate a Python 3.8+ virtual environment.
 1. Install the dependencies in an editable environment with `pip install -e .`.
 1. Create a Discord bot with permissions enabled for the Presences and Guild (Server) Members privileged intents, and "bot" permissions on Guild Install.
-1. Add the bot token to a `.env` file as the env variable `TOKEN`.
+1. Add the bot token to a `.env` file as the env variable `DISCORD_TOKEN`.
 1. `python -m stop_playing_factorio`
 1. Enjoy being sassed by a bot ⚙️❌
 
