@@ -5,7 +5,8 @@ description = "A silly Discord bot to tell people to stop playing Factorio."
 dependencies = [
   "discord.py",
   "python-dotenv",
-  "pytz"
+  "pytz",
+  "openai"
 ]
 
 [build-system]

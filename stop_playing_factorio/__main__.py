@@ -14,8 +14,7 @@ def main() -> None:
     load_dotenv()
     create_tables(connect())
 
-    # bot = GameWatchBot(game="Factorio")
-    bot = GameWatchBot(game="Minecraft")
+    bot = GameWatchBot(game="Factorio")
 
     handler = TimedRotatingFileHandler(
         filename="logs/spfbot.log",

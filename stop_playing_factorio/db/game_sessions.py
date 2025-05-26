@@ -76,6 +76,10 @@ class GameSession:
             else min(self.next_duration_nudge_due, self.next_lateness_nudge_due)
         )
 
+    @property
+    def duration(self) -> timedelta:
+        return datetime.now(pytz.utc) - self.started_at
+
 
 def get_game_sessions(con: Connection) -> Generator[GameSession, None, None]:
     for row in con.execute(

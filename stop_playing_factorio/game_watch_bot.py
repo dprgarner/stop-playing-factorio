@@ -21,6 +21,7 @@ from stop_playing_factorio.db.user_exchanges import (
     get_user_exchange,
     update_user_exchange,
 )
+from stop_playing_factorio.llm.generate_nudge import generate_nudge
 
 logger = logging.getLogger()
 
@@ -32,7 +33,7 @@ class GameWatchBot(commands.Bot):
     TODO: we want an agent to be able to:
     - Change time zones
     - Stop bothering me this session
-    - Change notification schedule (this will be hard, though - need a good model of notifications, and confidence that GPT can generate them. )
+    - Change notification schedule.
     """
 
     def __init__(
@@ -75,14 +76,14 @@ class GameWatchBot(commands.Bot):
                     yield (member.id, activity.created_at)
                     deduplicated_members.add(member.id)
 
-    async def send_dm(self, member: discord.Member, txt: str) -> discord.Message:
+    async def send_dm(self, user: discord.User, txt: str) -> discord.Message:
         """
         Sends a DM.
         """
-        logger.info(f"Attempting to message {member.name}")
-        channel = member.dm_channel or await member.create_dm()
+        logger.info(f"Attempting to message {user.name}")
+        channel = user.dm_channel or await user.create_dm()
         message = await channel.send(txt)
-        logger.info(f"Message sent to {member.name}: {txt}")
+        logger.info(f"Message sent to {user.name}: {txt}")
         return message
 
     async def on_ready(self):
@@ -115,23 +116,20 @@ class GameWatchBot(commands.Bot):
         """
         con = connect()
 
-        # TODO delete
-        start_game_session(
-            con,
-            241263400506621952,
-            datetime.now(tz=pytz.utc) - timedelta(minutes=75),
-        )
-        return
-        # TODO delete
+        try:
+            logger.info("Syncing active game sessions...")
+            actively_playing_members = list(self.actively_playing_members)
+            start_game_sessions(con, actively_playing_members)
+            stop_inactive_game_sessions(con, actively_playing_members)
+            delete_stale_game_sessions(con)
 
-        logger.info("Syncing active game sessions...")
-        actively_playing_members = list(self.actively_playing_members)
-        start_game_sessions(con, actively_playing_members)
-        stop_inactive_game_sessions(con, actively_playing_members)
-        delete_stale_game_sessions(con)
-
-        logger.info("Clearing stale user exchanges...")
-        delete_stale_user_exchanges(con)
+            logger.info("Clearing stale user exchanges...")
+            delete_stale_user_exchanges(con)
+        except Exception:
+            logger.error(
+                f"Could not sync game sessions and user exchanges",
+                exc_info=True,
+            )
 
     @tasks.loop(minutes=1)
     async def check_for_nudges(self):
@@ -143,15 +141,26 @@ class GameWatchBot(commands.Bot):
         con = connect()
         for game_session in get_game_sessions(con):
             if game_session.next_nudge_due < datetime.now(tz=pytz.utc):
-                logger.info(f"Nudge due for {game_session.discord_id}")
-                user_exchange = get_user_exchange(con, game_session.discord_id)
+                try:
+                    logger.info(f"Nudge due for {game_session.discord_id}")
+                    user_exchange = get_user_exchange(con, game_session.discord_id)
 
-                # Construct a relevant prompt - contains time played, local time, message history
-                # Send the prompt with the exchange to OpenAI
-                # (There won't be any agentic actions at this time, so not important here)
-                # Send a DM with the prompt response.
+                    user = self.get_user(
+                        game_session.discord_id
+                    ) or await self.fetch_user(game_session.discord_id)
 
-                update_user_exchange(
-                    con, game_session.discord_id, user_exchange + [{"baz": "qux"}]
-                )
-                update_latest_nudge(con, game_session.discord_id)
+                    async with user.dm_channel.typing():
+                        nudge = generate_nudge(user, game_session, user_exchange)
+                        await self.send_dm(user, nudge)
+
+                    update_user_exchange(
+                        con,
+                        game_session.discord_id,
+                        user_exchange + [{"role": "assistant", "content": nudge}],
+                    )
+                    update_latest_nudge(con, game_session.discord_id)
+                except Exception:
+                    logger.error(
+                        f"Could not send nudge to user {game_session.discord_id}",
+                        exc_info=True,
+                    )
