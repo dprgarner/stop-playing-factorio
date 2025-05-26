@@ -109,6 +109,9 @@ class GameWatchBot(commands.Bot):
         if message.author == self.user:
             return
 
+        if message.channel != message.author.dm_channel:
+            return  # Only support DMs at the moment
+
         con = connect()
         logger.info(f"Received message: {message.content}")
         async with (
