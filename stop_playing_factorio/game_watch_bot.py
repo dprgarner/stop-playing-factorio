@@ -10,6 +10,7 @@ from stop_playing_factorio.db import connect
 from stop_playing_factorio.db.game_sessions import (
     delete_stale_game_sessions,
     get_game_sessions,
+    is_in_game_session,
     start_game_session,
     start_game_sessions,
     stop_game_session,
@@ -22,6 +23,7 @@ from stop_playing_factorio.db.user_exchanges import (
     update_user_exchange,
 )
 from stop_playing_factorio.llm.generate_nudge import generate_nudge
+from stop_playing_factorio.llm.get_bot_response import get_bot_response
 
 logger = logging.getLogger()
 
@@ -80,7 +82,7 @@ class GameWatchBot(commands.Bot):
         """
         Sends a DM.
         """
-        logger.info(f"Attempting to message {user.name}")
+        logger.info(f"Sending message to {user.name}")
         channel = user.dm_channel or await user.create_dm()
         message = await channel.send(txt)
         logger.info(f"Message sent to {user.name}: {txt}")
@@ -102,6 +104,24 @@ class GameWatchBot(commands.Bot):
         else:
             logger.info(f"{after.name}({after.id}) has stopped playing {self.game}")
             stop_game_session(con, after.id)
+
+    async def on_message(self, message: discord.Message):
+        if message.author == self.user:
+            return
+
+        con = connect()
+        logger.info(f"Received message: {message.content}")
+        async with (
+            message.author.dm_channel or await message.author.create_dm()
+        ).typing():
+            user_exchange = get_bot_response(
+                message.author,
+                is_in_game_session(con, message.author.id),
+                get_user_exchange(con, message.author.id)
+                + [{"role": "user", "content": message.content}],
+            )
+            update_user_exchange(con, message.author.id, user_exchange)
+            await self.send_dm(message.author, user_exchange[-1]["content"])
 
     @tasks.loop(minutes=15)
     async def sync_data(self):
@@ -149,15 +169,13 @@ class GameWatchBot(commands.Bot):
                         game_session.discord_id
                     ) or await self.fetch_user(game_session.discord_id)
 
-                    async with user.dm_channel.typing():
-                        nudge = generate_nudge(user, game_session, user_exchange)
-                        await self.send_dm(user, nudge)
+                    async with (user.dm_channel or await user.create_dm()).typing():
+                        user_exchange = generate_nudge(
+                            user, game_session, user_exchange
+                        )
+                        await self.send_dm(user, user_exchange[-1]["content"])
 
-                    update_user_exchange(
-                        con,
-                        game_session.discord_id,
-                        user_exchange + [{"role": "assistant", "content": nudge}],
-                    )
+                    update_user_exchange(con, game_session.discord_id, user_exchange)
                     update_latest_nudge(con, game_session.discord_id)
                 except Exception:
                     logger.error(

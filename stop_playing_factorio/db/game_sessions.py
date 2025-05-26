@@ -100,6 +100,20 @@ def get_game_sessions(con: Connection) -> Generator[GameSession, None, None]:
         yield GameSession(*row)
 
 
+def is_in_game_session(con: Connection, discord_id: int) -> bool:
+    for row in con.execute(
+        """
+        SELECT discord_id
+            FROM GameSessions
+            WHERE ended_at IS NULL
+            AND discord_id = ?
+        """,
+        (discord_id,),
+    ):
+        return True
+    return False
+
+
 def start_game_session(
     con: Connection, discord_id: int, started_at: Optional[datetime]
 ):
