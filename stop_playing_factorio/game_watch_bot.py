@@ -107,16 +107,17 @@ class GameWatchBot(commands.Bot):
 
     async def on_message(self, message: discord.Message):
         if message.author == self.user:
+            logger.info("Received message, but from the bot")
             return
 
-        if message.channel != message.author.dm_channel:
+        dm_channel = message.author.dm_channel or await message.author.create_dm()
+        if message.channel != dm_channel:
+            logger.info("Received message, but not in the DM channel")
             return  # Only support DMs at the moment
 
         con = connect()
         logger.info(f"Received message: {message.content}")
-        async with (
-            message.author.dm_channel or await message.author.create_dm()
-        ).typing():
+        async with dm_channel.typing():
             user_exchange = get_bot_response(
                 message.author,
                 is_in_game_session(con, message.author.id),
