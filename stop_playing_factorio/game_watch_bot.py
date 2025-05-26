@@ -16,7 +16,7 @@ from stop_playing_factorio.db.game_sessions import (
     stop_inactive_game_sessions,
     update_latest_nudge,
 )
-from stop_playing_factorio.db.user_exchange import (
+from stop_playing_factorio.db.user_exchanges import (
     delete_stale_user_exchanges,
     get_user_exchange,
     update_user_exchange,
