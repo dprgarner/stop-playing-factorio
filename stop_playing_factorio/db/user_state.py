@@ -2,7 +2,9 @@ from sqlite3 import Connection
 from typing import Optional, Self
 
 
-# I should probably bin this
+#
+# I should probably bin this class
+#
 class UserState:
     _con: Connection
     discord_id: int

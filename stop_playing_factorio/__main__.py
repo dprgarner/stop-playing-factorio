@@ -6,15 +6,16 @@ from logging.handlers import TimedRotatingFileHandler
 import discord
 from dotenv import load_dotenv
 
-from stop_playing_factorio.db.setup import setup
+from stop_playing_factorio.db import connect, create_tables
 from stop_playing_factorio.game_watch_bot import GameWatchBot
 
 
 def main() -> None:
     load_dotenv()
+    create_tables(connect())
 
-    con = setup()
-    bot = GameWatchBot(game="Factorio", con=con)
+    # bot = GameWatchBot(game="Factorio")
+    bot = GameWatchBot(game="Minecraft")
 
     handler = TimedRotatingFileHandler(
         filename="logs/spfbot.log",

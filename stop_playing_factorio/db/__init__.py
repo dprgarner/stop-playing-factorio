@@ -16,12 +16,13 @@ sqlite3.register_adapter(datetime, adapt_datetime_iso)
 sqlite3.register_converter("DATETIME", convert_datetime)
 
 
-def setup():
-    """
-    Initialises the connection, and creates the tables if they don't already exist.
-    """
-    con = sqlite3.connect("spfbot.db", detect_types=sqlite3.PARSE_DECLTYPES)
+def connect() -> sqlite3.Connection:
+    return sqlite3.connect(
+        "spfbot.db", detect_types=sqlite3.PARSE_DECLTYPES, isolation_level=None
+    )
 
+
+def create_tables(con: sqlite3.Connection):
     # Only stored when needed. The Discord.py model is usually the
     # source-of-truth for user information.
     con.execute(
@@ -44,8 +45,7 @@ def setup():
             muted BOOLEAN DEFAULT FALSE,
             duration_nudge_frequency INTEGER DEFAULT 60,
             lateness_nudge_frequency INTEGER DEFAULT 30,
-            latest_duration_nudge DATETIME,
-            latest_lateness_nudge DATETIME
+            latest_nudge DATETIME
         );
         """
     )
@@ -54,12 +54,10 @@ def setup():
     # Exchanges are deleted after three hours with no more messages.
     con.execute(
         """
-        CREATE TABLE IF NOT EXISTS UserExchange(
+        CREATE TABLE IF NOT EXISTS UserExchanges(
             discord_id INTEGER UNIQUE NOT NULL,
-            started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            gpt_message_history JSON
+            latest_message DATETIME DEFAULT CURRENT_TIMESTAMP,
+            llm_message_history JSON
         );
         """
     )
-
-    return con

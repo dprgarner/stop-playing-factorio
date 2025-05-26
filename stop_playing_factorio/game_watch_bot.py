@@ -1,20 +1,25 @@
 from datetime import datetime, timedelta
 import logging
 import pytz
-from sqlite3 import Connection
 from typing import Optional
 
 import discord
 from discord.ext import commands, tasks
 
+from stop_playing_factorio.db import connect
 from stop_playing_factorio.db.game_sessions import (
-    GameSession,
     delete_stale_game_sessions,
     get_game_sessions,
     start_game_session,
     start_game_sessions,
     stop_game_session,
     stop_inactive_game_sessions,
+    update_latest_nudge,
+)
+from stop_playing_factorio.db.user_exchange import (
+    delete_stale_user_exchanges,
+    get_user_exchange,
+    update_user_exchange,
 )
 
 logger = logging.getLogger()
@@ -33,7 +38,6 @@ class GameWatchBot(commands.Bot):
     def __init__(
         self,
         game: str,
-        con: Connection,
         *args,
         **kwargs,
     ):
@@ -42,7 +46,6 @@ class GameWatchBot(commands.Bot):
         intents.presences = True
         super().__init__(*args, **kwargs, command_prefix="$", intents=intents)
         self.game = game
-        self.con = con
 
     def playing_activity(self, member: discord.Member) -> Optional[discord.Activity]:
         """
@@ -86,77 +89,49 @@ class GameWatchBot(commands.Bot):
         logger.info(
             f"Bot logged in as {self.user}. Finding players actively playing {self.game}..."
         )
-        self.sync_game_sessions.start()
+        self.sync_data.start()
         self.check_for_nudges.start()
 
     async def on_presence_update(self, _before: discord.Member, after: discord.Member):
+        con = connect()
         activity = self.playing_activity(after)
-        with self.con:
-            if activity:
-                logger.info(f"{after.name}({after.id}) is now playing {self.game}")
-                start_game_session(self.con, after.id, activity.created_at)
-            else:
-                logger.info(f"{after.name}({after.id}) has stopped playing {self.game}")
-                stop_game_session(self.con, after.id)
+        if activity:
+            logger.info(f"{after.name}({after.id}) is now playing {self.game}")
+            start_game_session(con, after.id, activity.created_at)
+        else:
+            logger.info(f"{after.name}({after.id}) has stopped playing {self.game}")
+            stop_game_session(con, after.id)
 
     @tasks.loop(minutes=15)
-    async def sync_game_sessions(self):
+    async def sync_data(self):
         """
         Syncs the active game sessions pulled from the Discord API with the
-        database-persisted game sessions.
+        database-persisted game sessions, and reaps stale game sessions and
+        user-exchanges.
 
         This table is also continuously updated with the `on_presence_update`
-        callback, so is mostly used to sync on start-up and to reap stale game sessions.
+        callback, so is mostly used to sync on start-up and to reap stale game
+        sessions.
         """
+        con = connect()
+
+        # TODO delete
+        start_game_session(
+            con,
+            241263400506621952,
+            datetime.now(tz=pytz.utc) - timedelta(minutes=75),
+        )
+        return
+        # TODO delete
+
         logger.info("Syncing active game sessions...")
         actively_playing_members = list(self.actively_playing_members)
-        with self.con:
-            start_game_sessions(self.con, actively_playing_members)
-            stop_inactive_game_sessions(self.con, actively_playing_members)
-            delete_stale_game_sessions(self.con)
+        start_game_sessions(con, actively_playing_members)
+        stop_inactive_game_sessions(con, actively_playing_members)
+        delete_stale_game_sessions(con)
 
-    def get_next_duration_nudge(self, game_session: GameSession):
-        """
-        Calculates the time when the next "duration" nudge is due, i.e. a
-        reminder that a member has been playing the game for more than a certain
-        length of time.
-
-        Nudges are due every `duration_nudge_frequency` minutes.
-        """
-        next_duration_nudge_due = game_session.started_at
-        latest_duration_nudge = (
-            game_session.latest_duration_nudge or game_session.started_at
-        )
-        while next_duration_nudge_due <= latest_duration_nudge:
-            next_duration_nudge_due += timedelta(
-                minutes=game_session.duration_nudge_frequency
-            )
-        return next_duration_nudge_due
-
-    def get_next_lateness_nudge(self, game_session: GameSession):
-        """
-        Calculates the time when the next "lateness" nudge is due, i.e. a
-        reminder that it's getting late.
-
-        Nudges start at 11pm local time on the day the game session starts (or
-        the day before if the session starts between midnight and 6am), and are
-        due every `lateness_nudge_frequency` minutes afterwards.
-        """
-        local_started_at = game_session.started_at.astimezone(game_session.time_zone)
-        local_lateness_threshold = local_started_at.replace(
-            hour=6, minute=0, second=0, microsecond=0
-        )
-        if local_lateness_threshold < local_started_at:
-            local_lateness_threshold += timedelta(days=1)
-        local_lateness_threshold -= timedelta(hours=7)
-        lateness_threshold = local_lateness_threshold.astimezone(pytz.utc)
-        next_lateness_nudge_due = lateness_threshold
-        if game_session.latest_lateness_nudge:
-            while next_lateness_nudge_due <= game_session.latest_lateness_nudge:
-                next_lateness_nudge_due += timedelta(
-                    minutes=game_session.lateness_nudge_frequency
-                )
-        return next_lateness_nudge_due
+        logger.info("Clearing stale user exchanges...")
+        delete_stale_user_exchanges(con)
 
     @tasks.loop(minutes=1)
     async def check_for_nudges(self):
@@ -165,9 +140,18 @@ class GameWatchBot(commands.Bot):
         Assumes that the GameSessions are up-to-date.
         """
         logger.info("Checking for nudges...")
-        for game_session in get_game_sessions(self.con):
-            next_duration_nudge_due = self.get_next_duration_nudge(game_session)
-            print("next duration nudge due:", next_duration_nudge_due)
+        con = connect()
+        for game_session in get_game_sessions(con):
+            if game_session.next_nudge_due < datetime.now(tz=pytz.utc):
+                logger.info(f"Nudge due for {game_session.discord_id}")
+                user_exchange = get_user_exchange(con, game_session.discord_id)
 
-            next_lateness_nudge_due = self.get_next_lateness_nudge(game_session)
-            print(f"Next lateness nudge due: {next_lateness_nudge_due}")
+                # Construct a relevant prompt - contains time played, local time, message history
+                # Send the prompt with the exchange to OpenAI
+                # (There won't be any agentic actions at this time, so not important here)
+                # Send a DM with the prompt response.
+
+                update_user_exchange(
+                    con, game_session.discord_id, user_exchange + [{"baz": "qux"}]
+                )
+                update_latest_nudge(con, game_session.discord_id)
