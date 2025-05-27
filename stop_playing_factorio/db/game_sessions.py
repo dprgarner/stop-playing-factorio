@@ -13,7 +13,7 @@ class GameSession:
     duration_nudge_frequency: int
     lateness_nudge_frequency: int
     latest_nudge: datetime
-    time_zone_str: str
+    time_zone_str: Optional[str]
 
     @property
     def time_zone(self):
@@ -84,24 +84,24 @@ class GameSession:
 def get_game_sessions(con: Connection) -> Generator[GameSession, None, None]:
     for row in con.execute(
         """
-            SELECT GS.discord_id,
-                GS.started_at,
-                GS.duration_nudge_frequency,
-                GS.lateness_nudge_frequency,
-                GS.latest_nudge,
-                US.time_zone
-            FROM GameSessions GS
-                LEFT JOIN UserStates US ON GS.discord_id = US.discord_id
-                WHERE GS.ended_at IS NULL
-                AND GS.muted = FALSE
-                AND US.blocked IS NOT TRUE;
-            """
+        SELECT GS.discord_id,
+            GS.started_at,
+            GS.duration_nudge_frequency,
+            GS.lateness_nudge_frequency,
+            GS.latest_nudge,
+            US.time_zone
+        FROM GameSessions GS
+            LEFT JOIN UserStates US ON GS.discord_id = US.discord_id
+            WHERE GS.ended_at IS NULL
+            AND GS.muted = FALSE
+            AND US.blocked IS NOT TRUE;
+        """
     ):
         yield GameSession(*row)
 
 
 def is_in_game_session(con: Connection, discord_id: int) -> bool:
-    for row in con.execute(
+    for _ in con.execute(
         """
         SELECT discord_id
             FROM GameSessions

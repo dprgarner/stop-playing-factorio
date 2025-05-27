@@ -2,12 +2,9 @@ from datetime import datetime, timedelta
 import logging
 from typing import Optional
 
-import discord
-from openai import OpenAI
 import pytz
 
 from stop_playing_factorio.db.game_sessions import GameSession
-from stop_playing_factorio.llm.core import CORE_CONTEXT, MODEL, get_instructions
 
 logger = logging.getLogger()
 
@@ -68,25 +65,3 @@ def get_nudge_prompt(game_session: GameSession) -> str:
     if game_session.duration < timedelta(hours=2):
         return f"Give the player a reminder to take a break. {duration_string}"
     return f"Give the player a message suggesting that they stop playing Factorio for now. {duration_string}"
-
-
-def generate_nudge(
-    user: discord.User, game_session: GameSession, user_exchange: list[object]
-) -> list[object]:
-    client = OpenAI()
-    instructions = get_instructions(user, True)
-    nudge_prompt = get_nudge_prompt(game_session)
-    logger.info(f"nudge_prompt: {nudge_prompt}")
-
-    user_exchange += [{"role": "user", "content": nudge_prompt}]
-    response = client.responses.create(
-        model=MODEL,
-        instructions=instructions,
-        input=user_exchange,
-        temperature=1.0,
-    )
-    if not response.output_text:
-        raise Exception("No output text received from OpenAI API")
-
-    logger.info(f"response from OpenAI API: {response.output_text}")
-    return user_exchange + [{"role": "assistant", "content": response.output_text}]

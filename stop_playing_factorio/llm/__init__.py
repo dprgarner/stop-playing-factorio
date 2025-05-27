@@ -1,6 +1,9 @@
 import logging
 
 import discord
+from openai import OpenAI
+
+from stop_playing_factorio.db.conversations import Conversation
 
 logger = logging.getLogger()
 
@@ -53,5 +56,19 @@ def get_user_context(user: discord.User, is_playing: bool) -> str:
     return user_context
 
 
-def get_instructions(user: discord.User, is_playing: bool) -> str:
+def get_instructions(user: discord.User, is_playing: bool = False) -> str:
     return CORE_CONTEXT.format(user_context=get_user_context(user, is_playing))
+
+
+def query_llm(instructions: str, conversation: Conversation) -> str:
+    client = OpenAI()
+    response = client.responses.create(
+        model=MODEL,
+        instructions=instructions,
+        input=conversation.llm_message_history,
+        temperature=1.0,
+    )
+    if not response.output_text:
+        raise Exception("No output text received from OpenAI API")
+    logger.info(f"response from OpenAI API: {response.output_text}")
+    return response.output_text

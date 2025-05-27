@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import logging
+import sqlite3
 import pytz
 from typing import Optional
 
@@ -8,6 +9,7 @@ from discord.ext import commands, tasks
 
 from stop_playing_factorio.db import connect
 from stop_playing_factorio.db.game_sessions import (
+    GameSession,
     delete_stale_game_sessions,
     get_game_sessions,
     is_in_game_session,
@@ -17,13 +19,14 @@ from stop_playing_factorio.db.game_sessions import (
     stop_inactive_game_sessions,
     update_latest_nudge,
 )
-from stop_playing_factorio.db.user_exchanges import (
-    delete_stale_user_exchanges,
-    get_user_exchange,
-    update_user_exchange,
+from stop_playing_factorio.db.conversations import (
+    delete_stale_conversations,
+    get_conversation,
+    save_conversation,
 )
-from stop_playing_factorio.llm.generate_nudge import generate_nudge
-from stop_playing_factorio.llm.get_bot_response import get_bot_response
+from stop_playing_factorio.llm import get_instructions, query_llm
+from stop_playing_factorio.llm.nudge_prompt import get_nudge_prompt
+
 
 logger = logging.getLogger()
 
@@ -78,16 +81,6 @@ class GameWatchBot(commands.Bot):
                     yield (member.id, activity.created_at)
                     deduplicated_members.add(member.id)
 
-    async def send_dm(self, user: discord.User, txt: str) -> discord.Message:
-        """
-        Sends a DM.
-        """
-        logger.info(f"Sending message to {user.name}")
-        channel = user.dm_channel or await user.create_dm()
-        message = await channel.send(txt)
-        logger.info(f"Message sent to {user.name}: {txt}")
-        return message
-
     async def on_ready(self):
         logger.info(
             f"Bot logged in as {self.user}. Finding players actively playing {self.game}..."
@@ -102,41 +95,42 @@ class GameWatchBot(commands.Bot):
             logger.info(f"{after.name}({after.id}) is now playing {self.game}")
             start_game_session(con, after.id, activity.created_at)
         else:
-            logger.info(f"{after.name}({after.id}) has stopped playing {self.game}")
+            logger.info(f"{after.name}({after.id}) is not playing {self.game}")
             stop_game_session(con, after.id)
 
     async def on_message(self, message: discord.Message):
         if message.author == self.user:
-            logger.info("Received message, but from the bot")
+            logger.info("Message seen, but sent by the bot")
             return
-
-        dm_channel = message.author.dm_channel or await message.author.create_dm()
-        if message.channel != dm_channel:
-            logger.info("Received message, but not in the DM channel")
-            return  # Only support DMs at the moment
 
         con = connect()
         logger.info(f"Received message: {message.content}")
-        async with dm_channel.typing():
-            user_exchange = get_bot_response(
-                message.author,
-                is_in_game_session(con, message.author.id),
-                get_user_exchange(con, message.author.id)
-                + [{"role": "user", "content": message.content}],
+        async with message.channel.typing():
+            conversation = get_conversation(con, message.author.id)
+            conversation.add_user_message(message.content)
+            msg_response = query_llm(
+                get_instructions(
+                    message.author,
+                    is_playing=is_in_game_session(con, message.author.id),
+                ),
+                conversation,
             )
-            update_user_exchange(con, message.author.id, user_exchange)
-            await self.send_dm(message.author, user_exchange[-1]["content"])
+            conversation.add_assistant_message(msg_response)
+            await message.reply(msg_response)
+            logger.info(f"Reply sent to {message.author.name}: {msg_response}")
+            save_conversation(con, conversation)
 
     @tasks.loop(minutes=15)
     async def sync_data(self):
         """
         Syncs the active game sessions pulled from the Discord API with the
         database-persisted game sessions, and reaps stale game sessions and
-        user-exchanges.
+        conversations.
 
-        This table is also continuously updated with the `on_presence_update`
-        callback, so is mostly used to sync on start-up and to reap stale game
-        sessions.
+        The game sessions table is also continuously updated with the
+        `on_presence_update` callback, so this task is mostly used to sync on
+        start-up, to reap stale game sessions and conversations and to recover
+        if events are unprocessed for any reason.
         """
         con = connect()
 
@@ -147,13 +141,33 @@ class GameWatchBot(commands.Bot):
             stop_inactive_game_sessions(con, actively_playing_members)
             delete_stale_game_sessions(con)
 
-            logger.info("Clearing stale user exchanges...")
-            delete_stale_user_exchanges(con)
+            logger.info("Clearing stale conversations...")
+            delete_stale_conversations(con)
         except Exception:
             logger.error(
-                f"Could not sync game sessions and user exchanges",
+                f"Could not sync game sessions and conversations",
                 exc_info=True,
             )
+
+    async def send_nudge(self, con: sqlite3.Connection, game_session: GameSession):
+        user = self.get_user(game_session.discord_id) or await self.fetch_user(
+            game_session.discord_id
+        )
+
+        dm_channel = user.dm_channel or await user.create_dm()
+        async with dm_channel.typing():
+            conversation = get_conversation(con, game_session.discord_id)
+            nudge_prompt = get_nudge_prompt(game_session)
+            logger.info(f"Created nudge prompt: {nudge_prompt}")
+            conversation.add_user_message(nudge_prompt)
+            nudge = query_llm(get_instructions(user, is_playing=True), conversation)
+            logger.info(f"Nudge generated from LLM: {nudge}")
+            conversation.add_assistant_message(nudge)
+            await dm_channel.send(nudge)
+            logger.info(f"Nudge DM'ed to user: {user.id}")
+
+        save_conversation(con, conversation)
+        update_latest_nudge(con, game_session.discord_id)
 
     @tasks.loop(minutes=1)
     async def check_for_nudges(self):
@@ -167,20 +181,7 @@ class GameWatchBot(commands.Bot):
             if game_session.next_nudge_due < datetime.now(tz=pytz.utc):
                 try:
                     logger.info(f"Nudge due for {game_session.discord_id}")
-                    user_exchange = get_user_exchange(con, game_session.discord_id)
-
-                    user = self.get_user(
-                        game_session.discord_id
-                    ) or await self.fetch_user(game_session.discord_id)
-
-                    async with (user.dm_channel or await user.create_dm()).typing():
-                        user_exchange = generate_nudge(
-                            user, game_session, user_exchange
-                        )
-                        await self.send_dm(user, user_exchange[-1]["content"])
-
-                    update_user_exchange(con, game_session.discord_id, user_exchange)
-                    update_latest_nudge(con, game_session.discord_id)
+                    await self.send_nudge(con, game_session)
                 except Exception:
                     logger.error(
                         f"Could not send nudge to user {game_session.discord_id}",

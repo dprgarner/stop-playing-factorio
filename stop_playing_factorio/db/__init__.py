@@ -49,12 +49,12 @@ def create_tables(con: sqlite3.Connection):
         );
         """
     )
-    # This is separate from a game session, as an exchange of messages could be
-    # in public or private, and when the user is or isn't playing Factorio.
-    # Exchanges are deleted after three hours with no more messages.
+    # This is separate from a game session, as a conversation could be in public
+    # or private, and when the user is or isn't playing Factorio. Conversations are
+    # deleted after two hours with no more messages.
     con.execute(
         """
-        CREATE TABLE IF NOT EXISTS UserExchanges(
+        CREATE TABLE IF NOT EXISTS Conversations(
             discord_id INTEGER UNIQUE NOT NULL,
             latest_message DATETIME DEFAULT CURRENT_TIMESTAMP,
             llm_message_history JSON
