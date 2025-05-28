@@ -12,6 +12,7 @@ from stop_playing_factorio.db.game_sessions import (
     GameSession,
     delete_stale_game_sessions,
     get_game_sessions,
+    is_in_game_session,
     start_game_session,
     start_game_sessions,
     stop_game_session,
@@ -106,20 +107,22 @@ class GameWatchBot(commands.Bot):
 
         con = connect()
         logger.info(f"Received message: {message.content}")
-        async with message.channel.typing():
-            conversation = get_conversation(con, message.author.id)
-            conversation.add_user_message(message.content)
-            msg_response = query_llm(
-                get_instructions(
-                    message.author,
-                    is_playing=bool(self.playing_activity(message.author)),
-                ),
-                conversation,
-            )
-            conversation.add_assistant_message(msg_response)
-            await message.reply(msg_response)
-            logger.info(f"Reply sent to {message.author.name}: {msg_response}")
-            save_conversation(con, conversation)
+        try:
+            async with message.channel.typing():
+                conversation = get_conversation(con, message.author.id)
+                conversation.add_user_message(message.content)
+                is_playing = is_in_game_session(con, message.author.id)
+                msg_response = query_llm(
+                    get_instructions(message.author, is_playing),
+                    conversation,
+                )
+                conversation.add_assistant_message(msg_response)
+                await message.reply(msg_response)
+                logger.info(f"Reply sent to {message.author.name}: {msg_response}")
+                save_conversation(con, conversation)
+        except:
+            logger.error(f"Error sending message", exc_info=True)
+            await message.add_reaction("🤷")
 
     @tasks.loop(minutes=15)
     async def sync_data(self):
