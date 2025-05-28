@@ -12,7 +12,6 @@ from stop_playing_factorio.db.game_sessions import (
     GameSession,
     delete_stale_game_sessions,
     get_game_sessions,
-    is_in_game_session,
     start_game_session,
     start_game_sessions,
     stop_game_session,
@@ -86,7 +85,7 @@ class GameWatchBot(commands.Bot):
             f"Bot logged in as {self.user}. Finding players actively playing {self.game}..."
         )
         self.sync_data.start()
-        self.check_for_nudges.start()
+        self.check_for_nudges_due.start()
 
     async def on_presence_update(self, _before: discord.Member, after: discord.Member):
         con = connect()
@@ -95,6 +94,8 @@ class GameWatchBot(commands.Bot):
             logger.info(f"{after.name}({after.id}) is now playing {self.game}")
             start_game_session(con, after.id, activity.created_at)
         else:
+            # This is called even if the user was not previously playing
+            # Factorio, but it's idempotent.
             logger.info(f"{after.name}({after.id}) is not playing {self.game}")
             stop_game_session(con, after.id)
 
@@ -111,7 +112,7 @@ class GameWatchBot(commands.Bot):
             msg_response = query_llm(
                 get_instructions(
                     message.author,
-                    is_playing=is_in_game_session(con, message.author.id),
+                    is_playing=bool(self.playing_activity(message.author)),
                 ),
                 conversation,
             )
@@ -159,9 +160,11 @@ class GameWatchBot(commands.Bot):
             conversation = get_conversation(con, game_session.discord_id)
             nudge_prompt = get_nudge_prompt(game_session)
             logger.info(f"Created nudge prompt: {nudge_prompt}")
+
             conversation.add_user_message(nudge_prompt)
             nudge = query_llm(get_instructions(user, is_playing=True), conversation)
             logger.info(f"Nudge generated from LLM: {nudge}")
+
             conversation.add_assistant_message(nudge)
             await dm_channel.send(nudge)
             logger.info(f"Nudge DM'ed to user: {user.id}")
@@ -170,12 +173,12 @@ class GameWatchBot(commands.Bot):
         update_latest_nudge(con, game_session.discord_id)
 
     @tasks.loop(minutes=1)
-    async def check_for_nudges(self):
+    async def check_for_nudges_due(self):
         """
         Check if anyone needs a nudge.
         Assumes that the GameSessions are up-to-date.
         """
-        logger.info("Checking for nudges...")
+        logger.info("Checking for nudges due...")
         con = connect()
         for game_session in get_game_sessions(con):
             if game_session.next_nudge_due < datetime.now(tz=pytz.utc):
