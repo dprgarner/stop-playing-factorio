@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 import sqlite3
 import pytz
@@ -113,7 +113,7 @@ class GameWatchBot(commands.Bot):
                 conversation.add_user_message(message.content)
                 is_playing = is_in_game_session(con, message.author.id)
                 msg_response = query_llm(
-                    get_instructions(message.author, is_playing),
+                    get_instructions(self.user, message.author, is_playing),
                     conversation,
                 )
                 conversation.add_assistant_message(msg_response)
@@ -165,7 +165,9 @@ class GameWatchBot(commands.Bot):
             logger.info(f"Created nudge prompt: {nudge_prompt}")
 
             conversation.add_user_message(nudge_prompt)
-            nudge = query_llm(get_instructions(user, is_playing=True), conversation)
+            nudge = query_llm(
+                get_instructions(self.user, user, is_playing=True), conversation
+            )
             logger.info(f"Nudge generated from LLM: {nudge}")
 
             conversation.add_assistant_message(nudge)

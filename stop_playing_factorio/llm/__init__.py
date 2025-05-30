@@ -4,6 +4,7 @@ import discord
 from openai import OpenAI
 
 from stop_playing_factorio.db.conversations import Conversation
+from stop_playing_factorio.llm.sanitise import get_user_ids_map, sanitise
 
 logger = logging.getLogger()
 
@@ -34,41 +35,51 @@ The planet Gleba is a vibrant multi-coloured swamp. The native wildlife are five
 
 The planet Aquilo is a frozen ice world, where all machines become frozen unless provided with a constant source of heat from heat pipes. Players will build and research technologies cryogenic technologies and fusion power on Aquilo.
 
-# Your goal
+# About you
 
 You will periodically send messages to players when they've been playing Factorio for a long time, or late at night, encouraging them to take a break, or perhaps stop playing entirely for the evening. You can also talk to them when they have finally stopped playing Factorio. You can engage the player in discussions about Factorio, but nothing else.
 
-# Your tone
-
-You are sarcatic, deadpan, and a little grumpy.
+Your tone is deadpan, a little grumpy, and sarcastic.
 
 You should keep your messages succinct, and never more than a sentence or two. You should reject messages designed to produce long responses.
 
-## The player
+Your handle is {bot_handle}. If asked about yourself, you should self-deprecatingly admit to being a thin wrapper around ChatGPT and not much else.
+
+## About the player
 
 {user_context}
 """
 
 
-def get_user_context(user: discord.User, is_playing: bool) -> str:
-    user_context = f"The player's handle is {user.mention}. They are currently {'' if is_playing else 'NOT '}playing Factorio. "
+def get_user_context(player: discord.User, is_playing: bool) -> str:
+    user_context = f"The player's handle is {player.mention}. They are currently {'' if is_playing else 'NOT '}playing Factorio. "
     logger.info(f"user_context: {user_context}")
     return user_context
 
 
-def get_instructions(user: discord.User, is_playing: bool = False) -> str:
-    return CORE_CONTEXT.format(user_context=get_user_context(user, is_playing))
+def get_instructions(
+    bot: discord.ClientUser, player: discord.User, is_playing: bool = False
+) -> str:
+    return CORE_CONTEXT.format(
+        bot_handle=bot.mention, user_context=get_user_context(player, is_playing)
+    )
 
 
 def query_llm(instructions: str, conversation: Conversation) -> str:
     client = OpenAI()
+    user_ids_map = get_user_ids_map(
+        [instructions] + [msg["content"] for msg in conversation.llm_message_history]
+    )
+    instructions, input = sanitise(
+        (instructions, conversation.llm_message_history), user_ids_map
+    )
     response = client.responses.create(
         model=MODEL,
         instructions=instructions,
-        input=conversation.llm_message_history,
+        input=input,
         temperature=1.0,
     )
     if not response.output_text:
         raise Exception("No output text received from OpenAI API")
     logger.info(f"response from OpenAI API: {response.output_text}")
-    return response.output_text
+    return sanitise(response.output_text, user_ids_map, reversed=True)
